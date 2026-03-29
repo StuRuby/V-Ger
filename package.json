@@ -1,10 +1,18 @@
 {
   "name": "v-ger",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Self-evolving coding agent experiments on Pi + Kimi",
+  "type": "module",
+  "main": "dist/src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "dev": "tsx src/index.ts",
+    "start": "node --env-file=.env dist/src/index.js",
+    "test": "vitest run",
+    "smoke:kimi": "npm run build && node --env-file=.env dist/src/index.js \"list files in current directory using tools.\"",
+    "evolve:cycle": "npm run build && node --env-file=.env dist/scripts/evolve-cycle.js",
+    "lint": "echo \"no lint yet\""
   },
   "repository": {
     "type": "git",
@@ -12,9 +20,18 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/StuRuby/V-Ger/issues"
   },
-  "homepage": "https://github.com/StuRuby/V-Ger#readme"
+  "homepage": "https://github.com/StuRuby/V-Ger#readme",
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "0.63.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
 }

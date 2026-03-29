@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.DS_Store
+tmp/
+.pi/*
+!.pi/extensions/
+!.pi/extensions/**
+docs/
