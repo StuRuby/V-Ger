@@ -7,3 +7,4 @@ tmp/
 !.pi/extensions/
 !.pi/extensions/**
 docs/
+artifacts/benchmarks/

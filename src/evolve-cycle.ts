@@ -5,7 +5,8 @@ import { join } from "node:path";
 export const REQUIRED_EXTENSIONS = [
   ".pi/extensions/protected-paths.ts",
   ".pi/extensions/permission-gate.ts",
-  ".pi/extensions/git-checkpoint.ts"
+  ".pi/extensions/git-checkpoint.ts",
+  ".pi/extensions/writable-scope.ts"
 ];
 
 export const DEFAULT_EVOLVE_OBJECTIVE = "make one safe, useful improvement with tests";
