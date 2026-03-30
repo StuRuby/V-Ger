@@ -3,7 +3,13 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { spawn } from "node:child_process";
-import { AuthStorage, createAgentSession, ModelRegistry, SessionManager } from "@mariozechner/pi-coding-agent";
+import {
+  type AgentSession,
+  AuthStorage,
+  createAgentSession,
+  ModelRegistry,
+  SessionManager
+} from "@mariozechner/pi-coding-agent";
 import {
   type BenchmarkTaskResult,
   calculateBenchmarkMetrics,
@@ -190,21 +196,23 @@ async function main(): Promise<void> {
     const toolsUsed = new Set<string>();
     let sessionError = false;
     let timedOut = false;
+    let session: AgentSession | undefined = undefined;
 
-    const abortController = new AbortController();
     const timeoutHandle = setTimeout(() => {
       timedOut = true;
-      abortController.abort();
+      // prompt() 本身不接收 AbortSignal，超时必须直接终止底层 session 才能真正停止 agent。
+      void session?.abort();
     }, TASK_TIMEOUT_MS);
 
     try {
-      const { session } = await createAgentSession({
+      const createdSession = await createAgentSession({
         cwd: worktreeDir,
         model,
         sessionManager: SessionManager.inMemory(),
         authStorage,
         modelRegistry
       });
+      session = createdSession.session;
 
       session.subscribe((event) => {
         if (event.type === "tool_execution_start") {

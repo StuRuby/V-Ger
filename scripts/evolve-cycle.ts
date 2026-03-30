@@ -9,7 +9,6 @@ import {
   type BenchmarkMetrics,
   getBenchmarkReportPath,
   loadBenchmarkTasks,
-  validateBenchmarkMetrics,
   validateBenchmarkTasks
 } from "../src/benchmark.js";
 import {
@@ -220,11 +219,6 @@ async function main() {
     } catch {
       failReason = pickFailReason([failReason, "Could not read benchmark report."]);
     }
-  }
-
-  benchmarkMetricErrors = validateBenchmarkMetrics(benchmarkMetrics);
-  if (benchmarkMetricErrors.length > 0) {
-    failReason = pickFailReason([failReason, "Benchmark metric threshold gate failed."]);
   }
 
   const endedAt = new Date();

@@ -216,27 +216,21 @@ export function selectBenchmarkTasks(
   sampleDev: number = BENCHMARK_DEV_TASKS,
   sampleHoldout: number = BENCHMARK_HOLDOUT_TASKS
 ): BenchmarkTask[] {
-  // 抽样保留 seed 文件原始顺序，便于复现某个失败任务，而不是在运行期重新随机化。
-  const devLimit = Math.max(0, Math.min(BENCHMARK_DEV_TASKS, sampleDev));
-  const holdoutLimit = Math.max(0, Math.min(BENCHMARK_HOLDOUT_TASKS, sampleHoldout));
-
-  const selected: BenchmarkTask[] = [];
-  let devCount = 0;
-  let holdoutCount = 0;
-
-  for (const task of tasks) {
-    if (task.split === "dev" && devCount < devLimit) {
-      selected.push(task);
-      devCount += 1;
-      continue;
+  function shuffled<T>(arr: T[]): T[] {
+    const copy = [...arr];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
     }
-    if (task.split === "holdout" && holdoutCount < holdoutLimit) {
-      selected.push(task);
-      holdoutCount += 1;
-    }
+    return copy;
   }
 
-  return selected;
+  const devLimit = Math.max(0, Math.min(BENCHMARK_DEV_TASKS, sampleDev));
+  const holdoutLimit = Math.max(0, Math.min(BENCHMARK_HOLDOUT_TASKS, sampleHoldout));
+  // benchmark 运行时要覆盖更广的任务面，所以每个 split 先洗牌，再各自截取样本数。
+  const devTasks = shuffled(tasks.filter((task) => task.split === "dev")).slice(0, devLimit);
+  const holdoutTasks = shuffled(tasks.filter((task) => task.split === "holdout")).slice(0, holdoutLimit);
+  return [...devTasks, ...holdoutTasks];
 }
 
 function roundPercentage(value: number): number {
