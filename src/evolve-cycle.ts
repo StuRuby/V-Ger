@@ -2,6 +2,37 @@ import { access } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { join } from "node:path";
 
+/**
+ * Structured log entry for tool-calling events.
+ * Used by extensions to log blocked/allowed tool calls for observability.
+ */
+export type ToolCallLogEntry = {
+  timestamp: string;
+  toolName: string;
+  action: "blocked" | "allowed";
+  reason?: string;
+  input?: Record<string, unknown>;
+};
+
+/**
+ * Creates a structured log entry for a tool-calling event.
+ * Extensions use this to maintain consistent logging format.
+ */
+export function createToolCallLogEntry(
+  toolName: string,
+  action: "blocked" | "allowed",
+  reason?: string,
+  input?: Record<string, unknown>
+): ToolCallLogEntry {
+  return {
+    timestamp: new Date().toISOString(),
+    toolName,
+    action,
+    reason,
+    input
+  };
+}
+
 export const REQUIRED_EXTENSIONS = [
   ".pi/extensions/protected-paths.ts",
   ".pi/extensions/permission-gate.ts",
