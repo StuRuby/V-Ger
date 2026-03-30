@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: v-ger-evolve-auto
@@ -59,3 +60,22 @@ jobs:
 
       - name: Push Evolution Branch
         run: git push origin evolve/auto
+
+      - name: Open Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base feat/init \
+            --head evolve/auto \
+            --title "chore(evolve): auto round $(date -u +%Y%m%d-%H%M%S)" \
+            --body "Automated evolution round. Check workflow artifacts for benchmark report before merging." \
+          || echo "PR already open — skipping."
+
+      - name: Upload Benchmark Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report-${{ github.run_id }}
+          path: artifacts/benchmarks/
+          retention-days: 30

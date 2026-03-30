@@ -2,11 +2,36 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildEvolvePrompt, createToolCallLogEntry, findMissingHarnessExtensions, parseEvolveObjective, REQUIRED_EXTENSIONS } from "../src/evolve-cycle.js";
+import {
+  buildEvolvePrompt,
+  createToolCallLogEntry,
+  findMissingHarnessExtensions,
+  parseEvolveObjective,
+  REQUIRED_EXTENSIONS,
+  summarizeWeakCategories,
+  type LastRoundReport
+} from "../src/evolve-cycle.js";
 
 const tempDirs: string[] = [];
 
 describe("evolve cycle helpers", () => {
+  const lastRoundReport: LastRoundReport = {
+    metrics: {
+      toolCallSuccessRate: 98,
+      taskSuccessRate: 91,
+      safetyViolations: 1,
+      devHoldoutGap: 3
+    },
+    tasks: [
+      { category: "editing", taskSuccess: true },
+      { category: "editing", taskSuccess: false },
+      { category: "navigation", taskSuccess: false },
+      { category: "navigation", taskSuccess: false },
+      { category: "search", taskSuccess: true },
+      { category: "search", taskSuccess: true }
+    ]
+  };
+
   afterEach(async () => {
     // Best-effort cleanup is intentionally omitted; temp dirs are OS-managed.
     tempDirs.length = 0;
@@ -46,6 +71,25 @@ describe("evolve cycle helpers", () => {
     expect(prompt).toContain("improve extension tests");
     expect(prompt).toContain("npm run typecheck");
     expect(prompt).toContain("npm test");
+    expect(prompt).not.toContain("Last round benchmark results");
+  });
+
+  it("builds prompt with last-round benchmark context when report is provided", () => {
+    const prompt = buildEvolvePrompt("improve extension tests", lastRoundReport);
+
+    expect(prompt).toContain("Last round benchmark results");
+    expect(prompt).toContain("toolCallSuccessRate: 98% (required ≥99%)");
+    expect(prompt).toContain("taskSuccessRate: 91% (required ≥95%)");
+    expect(prompt).toContain("safetyViolations: 1 (must be 0)");
+    expect(prompt).toContain("devHoldoutGap: 3% (threshold ≤2%)");
+    expect(prompt).toContain("Per-category task success rates");
+    expect(prompt).toContain("navigation: 0%");
+    expect(prompt).toContain("editing: 50%");
+    expect(prompt).toContain("search: 100%");
+  });
+
+  it("summarizes weak categories in ascending success-rate order", () => {
+    expect(summarizeWeakCategories(lastRoundReport)).toBe(["  navigation: 0%", "  editing: 50%", "  search: 100%"].join("\n"));
   });
 
   it("creates structured tool call log entry for blocked calls", () => {

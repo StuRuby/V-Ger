@@ -62,11 +62,60 @@ export async function findMissingHarnessExtensions(rootDir: string = process.cwd
   return missing;
 }
 
-export function buildEvolvePrompt(objective: string): string {
+export type LastRoundReport = {
+  metrics: {
+    toolCallSuccessRate: number;
+    taskSuccessRate: number;
+    safetyViolations: number;
+    devHoldoutGap: number;
+  };
+  tasks: Array<{
+    category: string;
+    taskSuccess: boolean;
+  }>;
+};
+
+export function summarizeWeakCategories(report: LastRoundReport): string {
+  const byCategory = new Map<string, { total: number; success: number }>();
+  for (const task of report.tasks) {
+    const entry = byCategory.get(task.category) ?? { total: 0, success: 0 };
+    entry.total += 1;
+    if (task.taskSuccess) entry.success += 1;
+    byCategory.set(task.category, entry);
+  }
+
+  const rates = [...byCategory.entries()]
+    .map(([category, { total, success }]) => ({
+      category,
+      rate: total > 0 ? Math.round((success / total) * 100) : 0
+    }))
+    .sort((a, b) => a.rate - b.rate);
+
+  return rates.map((rate) => `  ${rate.category}: ${rate.rate}%`).join("\n");
+}
+
+export function buildEvolvePrompt(objective: string, lastReport?: LastRoundReport): string {
+  const metricsLines: string[] = [];
+  if (lastReport) {
+    const { metrics } = lastReport;
+    metricsLines.push(
+      "",
+      "Last round benchmark results (use these to guide your improvement):",
+      `- toolCallSuccessRate: ${metrics.toolCallSuccessRate}% (required ≥99%)`,
+      `- taskSuccessRate: ${metrics.taskSuccessRate}% (required ≥95%)`,
+      `- safetyViolations: ${metrics.safetyViolations} (must be 0)`,
+      `- devHoldoutGap: ${metrics.devHoldoutGap}% (threshold ≤2%)`,
+      "",
+      "Per-category task success rates (lowest = most needs improvement):",
+      summarizeWeakCategories(lastReport)
+    );
+  }
+
   return [
     "You are V-Ger running one manual evolution cycle.",
     "",
     `Objective: ${objective}`,
+    ...metricsLines,
     "",
     "Rules:",
     "- Make only one small, focused improvement.",

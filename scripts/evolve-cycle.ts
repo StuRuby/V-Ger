@@ -15,7 +15,8 @@ import {
   buildEvolvePrompt,
   DEFAULT_EVOLVE_OBJECTIVE,
   findMissingHarnessExtensions,
-  parseEvolveObjective
+  parseEvolveObjective,
+  type LastRoundReport
 } from "../src/evolve-cycle.js";
 import { createRoundId, type GateCheckResult, writeRoundArtifact } from "../src/round-artifact.js";
 
@@ -104,7 +105,18 @@ async function main() {
   const roundId = createRoundId();
   const startedAt = new Date();
   const objective = parseEvolveObjective(process.argv.slice(2)) ?? DEFAULT_EVOLVE_OBJECTIVE;
-  const prompt = buildEvolvePrompt(objective);
+
+  // 尝试把上一轮 benchmark 结果注入 prompt，让本轮演化优先修复最弱项。
+  let lastReport: LastRoundReport | undefined;
+  try {
+    const reportPath = getBenchmarkReportPath(cwd);
+    const raw = await readFile(reportPath, "utf8");
+    lastReport = JSON.parse(raw) as LastRoundReport;
+  } catch {
+    // 首次运行或报告不存在时不阻塞演化；保持 prompt 回退到基础版本。
+  }
+
+  const prompt = buildEvolvePrompt(objective, lastReport);
 
   let failReason: string | undefined;
   const checks: GateCheckResult[] = [];
