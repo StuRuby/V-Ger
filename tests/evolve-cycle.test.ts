@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildEvolvePrompt, findMissingHarnessExtensions, parseEvolveObjective, REQUIRED_EXTENSIONS } from "../src/evolve-cycle.js";
+import { buildEvolvePrompt, createToolCallLogEntry, findMissingHarnessExtensions, parseEvolveObjective, REQUIRED_EXTENSIONS } from "../src/evolve-cycle.js";
 
 const tempDirs: string[] = [];
 
@@ -45,5 +45,22 @@ describe("evolve cycle helpers", () => {
     expect(prompt).toContain("improve extension tests");
     expect(prompt).toContain("npm run typecheck");
     expect(prompt).toContain("npm test");
+  });
+
+  it("creates structured tool call log entry for blocked calls", () => {
+    const entry = createToolCallLogEntry("write", "blocked", "Path is protected", { path: ".env" });
+    expect(entry.toolName).toBe("write");
+    expect(entry.action).toBe("blocked");
+    expect(entry.reason).toBe("Path is protected");
+    expect(entry.input).toEqual({ path: ".env" });
+    expect(entry.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("creates structured tool call log entry for allowed calls", () => {
+    const entry = createToolCallLogEntry("read", "allowed");
+    expect(entry.toolName).toBe("read");
+    expect(entry.action).toBe("allowed");
+    expect(entry.reason).toBeUndefined();
+    expect(entry.input).toBeUndefined();
   });
 });

@@ -53,6 +53,15 @@ export type BenchmarkMetrics = {
   devHoldoutGap: number;
 };
 
+export type BenchmarkTaskResult = {
+  id: string;
+  split: BenchmarkSplit;
+  category: BenchmarkCategory;
+  toolSuccess: boolean;
+  taskSuccess: boolean;
+  safetyViolation: boolean;
+};
+
 const EXPECTED_CATEGORY_COUNTS: Record<BenchmarkCategory, number> = {
   single_tool: 30,
   multi_tool_chain: 30,
@@ -63,6 +72,10 @@ const EXPECTED_CATEGORY_COUNTS: Record<BenchmarkCategory, number> = {
 
 export function getBenchmarkSeedPath(rootDir: string = process.cwd()): string {
   return join(rootDir, "benchmarks", "tool-calling", "v1", "seed.json");
+}
+
+export function getBenchmarkReportPath(rootDir: string = process.cwd()): string {
+  return join(rootDir, "artifacts", "benchmarks", "tool-calling-v1-latest.json");
 }
 
 function assertBenchmarkSeed(seed: unknown): asserts seed is BenchmarkSeed {
@@ -194,4 +207,70 @@ export function validateBenchmarkMetrics(metrics: BenchmarkMetrics): string[] {
   }
 
   return errors;
+}
+
+export function selectBenchmarkTasks(
+  tasks: BenchmarkTask[],
+  sampleDev: number = BENCHMARK_DEV_TASKS,
+  sampleHoldout: number = BENCHMARK_HOLDOUT_TASKS
+): BenchmarkTask[] {
+  const devLimit = Math.max(0, Math.min(BENCHMARK_DEV_TASKS, sampleDev));
+  const holdoutLimit = Math.max(0, Math.min(BENCHMARK_HOLDOUT_TASKS, sampleHoldout));
+
+  const selected: BenchmarkTask[] = [];
+  let devCount = 0;
+  let holdoutCount = 0;
+
+  for (const task of tasks) {
+    if (task.split === "dev" && devCount < devLimit) {
+      selected.push(task);
+      devCount += 1;
+      continue;
+    }
+    if (task.split === "holdout" && holdoutCount < holdoutLimit) {
+      selected.push(task);
+      holdoutCount += 1;
+    }
+  }
+
+  return selected;
+}
+
+function roundPercentage(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function percentage(numerator: number, denominator: number): number {
+  if (denominator <= 0) return 0;
+  return roundPercentage((numerator / denominator) * 100);
+}
+
+export function calculateBenchmarkMetrics(results: BenchmarkTaskResult[]): BenchmarkMetrics {
+  const devResults = results.filter((result) => result.split === "dev");
+  const holdoutResults = results.filter((result) => result.split === "holdout");
+
+  const toolSuccessRate = percentage(
+    results.filter((result) => result.toolSuccess).length,
+    results.length
+  );
+  const taskSuccessRate = percentage(
+    results.filter((result) => result.taskSuccess).length,
+    results.length
+  );
+  const safetyViolations = results.filter((result) => result.safetyViolation).length;
+  const devSuccessRate = percentage(
+    devResults.filter((result) => result.taskSuccess).length,
+    devResults.length
+  );
+  const holdoutSuccessRate = percentage(
+    holdoutResults.filter((result) => result.taskSuccess).length,
+    holdoutResults.length
+  );
+
+  return {
+    toolCallSuccessRate: toolSuccessRate,
+    taskSuccessRate,
+    safetyViolations,
+    devHoldoutGap: roundPercentage(Math.abs(devSuccessRate - holdoutSuccessRate))
+  };
 }

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateBenchmarkMetrics,
   BENCHMARK_DEV_TASKS,
   BENCHMARK_HOLDOUT_TASKS,
   BENCHMARK_TOTAL_TASKS,
   loadBenchmarkTasks,
+  selectBenchmarkTasks,
   validateBenchmarkMetrics,
   validateBenchmarkTasks
 } from "../src/benchmark.js";
@@ -27,5 +29,26 @@ describe("benchmark scaffold", () => {
       devHoldoutGap: 3
     });
     expect(errors.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("selects requested dev and holdout sample sizes", async () => {
+    const tasks = await loadBenchmarkTasks(process.cwd());
+    const selected = selectBenchmarkTasks(tasks, 3, 2);
+    expect(selected.filter((task) => task.split === "dev")).toHaveLength(3);
+    expect(selected.filter((task) => task.split === "holdout")).toHaveLength(2);
+  });
+
+  it("calculates benchmark metrics from task results", () => {
+    const metrics = calculateBenchmarkMetrics([
+      { id: "a", split: "dev", category: "single_tool", toolSuccess: true, taskSuccess: true, safetyViolation: false },
+      { id: "b", split: "dev", category: "single_tool", toolSuccess: true, taskSuccess: false, safetyViolation: false },
+      { id: "c", split: "holdout", category: "single_tool", toolSuccess: false, taskSuccess: false, safetyViolation: true },
+      { id: "d", split: "holdout", category: "single_tool", toolSuccess: true, taskSuccess: true, safetyViolation: false }
+    ]);
+
+    expect(metrics.toolCallSuccessRate).toBe(75);
+    expect(metrics.taskSuccessRate).toBe(50);
+    expect(metrics.safetyViolations).toBe(1);
+    expect(metrics.devHoldoutGap).toBe(0);
   });
 });

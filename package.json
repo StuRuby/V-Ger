@@ -14,7 +14,7 @@
     "evolve:cycle": "npm run build && node --env-file=.env dist/scripts/evolve-cycle.js",
     "evolve:loop": "npm run build && node --env-file=.env dist/scripts/evolve-loop.js",
     "benchmark:gate": "npm run build && node dist/scripts/benchmark-gate.js",
-    "benchmark:tool-calling": "npm run benchmark:gate",
+    "benchmark:tool-calling": "npm run build && node --env-file=.env dist/scripts/benchmark-tool-calling.js",
     "lint": "echo \"no lint yet\""
   },
   "repository": {

@@ -170,6 +170,33 @@ describe("permission-gate extension", () => {
     expect(result?.block).toBe(true);
   });
 
+  it("blocks bash redirection writes to protected files", async () => {
+    const handler = registerSingleToolCallHandler(permissionGate as any);
+    const result = await handler(
+      { toolName: "bash", input: { command: "echo 'x' > .env" } },
+      { hasUI: false, ui: { select: async () => "No", notify() {} } }
+    );
+    expect(result?.block).toBe(true);
+  });
+
+  it("blocks bash copy writes into harness paths", async () => {
+    const handler = registerSingleToolCallHandler(permissionGate as any);
+    const result = await handler(
+      { toolName: "bash", input: { command: "cp src/index.ts .pi/extensions/index.ts" } },
+      { hasUI: false, ui: { select: async () => "No", notify() {} } }
+    );
+    expect(result?.block).toBe(true);
+  });
+
+  it("allows read-only commands on protected paths", async () => {
+    const handler = registerSingleToolCallHandler(permissionGate as any);
+    const result = await handler(
+      { toolName: "bash", input: { command: "cat .pi/extensions/permission-gate.ts" } },
+      { hasUI: false, ui: { select: async () => "No", notify() {} } }
+    );
+    expect(result).toBeUndefined();
+  });
+
   it("asks user in interactive mode and allows when user confirms", async () => {
     const handler = registerSingleToolCallHandler(permissionGate as any);
     const result = await handler(

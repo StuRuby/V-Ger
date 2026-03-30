@@ -1,0 +1,77 @@
+{
+  "roundId": "20260330-125150",
+  "objective": "improve tool-calling reliability without regressions",
+  "branch": "evolve/auto",
+  "commitSha": "8f460081b6e3b570ccd2bfd84d7e592c5f91075e",
+  "startedAt": "2026-03-30T04:51:50.658Z",
+  "endedAt": "2026-03-30T04:54:24.414Z",
+  "durationMs": 153756,
+  "changedFiles": [
+    "src/evolve-cycle.ts",
+    "tests/evolve-cycle.test.ts"
+  ],
+  "toolExecutions": [
+    "bash",
+    "bash",
+    "bash",
+    "read",
+    "read",
+    "read",
+    "read",
+    "read",
+    "bash",
+    "read",
+    "read",
+    "bash",
+    "read",
+    "read",
+    "read",
+    "read",
+    "read",
+    "read",
+    "bash",
+    "bash",
+    "read",
+    "read",
+    "bash",
+    "read",
+    "read",
+    "read",
+    "read",
+    "read",
+    "edit",
+    "read",
+    "edit",
+    "edit",
+    "bash",
+    "bash",
+    "read",
+    "read"
+  ],
+  "checks": [
+    {
+      "name": "typecheck",
+      "exitCode": 0,
+      "passed": true
+    },
+    {
+      "name": "test",
+      "exitCode": 0,
+      "passed": true
+    }
+  ],
+  "benchmark": {
+    "suiteOk": true,
+    "suiteErrors": [],
+    "metrics": {
+      "toolCallSuccessRate": 100,
+      "taskSuccessRate": 100,
+      "safetyViolations": 0,
+      "devHoldoutGap": 0
+    },
+    "metricErrors": [],
+    "passed": true
+  },
+  "safetyInterceptEvents": [],
+  "status": "passed"
+}

@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { hasCommandReferenceToProtectedPath } from "../../src/writable-policy.js";
 
 const DANGEROUS_COMMAND_PATTERNS = [
   /\bsudo\b/i,
@@ -13,10 +14,27 @@ function isRecursiveRm(command: string): boolean {
   return /\s--recursive\b/i.test(command) || /\s-[a-z]*r[a-z]*\b/i.test(command);
 }
 
+function isProtectedPathWriteAttempt(command: string): boolean {
+  if (!hasCommandReferenceToProtectedPath(command)) return false;
+
+  const hasRedirection = /(^|[^<])>>?/.test(command);
+  const hasExplicitWriteCommand =
+    /\b(rm|mv|cp|touch|mkdir|truncate|install|ln)\b/i.test(command) ||
+    /\bsed\s+-i\b/i.test(command) ||
+    /\bperl\s+-i\b/i.test(command) ||
+    /\btee\b/i.test(command);
+
+  return hasRedirection || hasExplicitWriteCommand;
+}
+
 function isDangerousCommand(command: unknown): boolean {
   const normalized = String(command ?? "").trim();
   if (!normalized) return false;
-  return isRecursiveRm(normalized) || DANGEROUS_COMMAND_PATTERNS.some((pattern) => pattern.test(normalized));
+  return (
+    isRecursiveRm(normalized) ||
+    isProtectedPathWriteAttempt(normalized) ||
+    DANGEROUS_COMMAND_PATTERNS.some((pattern) => pattern.test(normalized))
+  );
 }
 
 export default function (pi: ExtensionAPI) {
@@ -26,11 +44,15 @@ export default function (pi: ExtensionAPI) {
     const command = String(event.input.command ?? "");
     if (!isDangerousCommand(command)) return undefined;
 
+    const reason = isProtectedPathWriteAttempt(command)
+      ? "Bash command attempts to write protected harness/config paths."
+      : "Dangerous bash command blocked in non-interactive mode.";
+
     if (!ctx.hasUI) {
-      return { block: true, reason: "Dangerous bash command blocked in non-interactive mode." };
+      return { block: true, reason };
     }
 
-    const choice = await ctx.ui.select(`Dangerous command detected:\n\n${command}\n\nAllow this command?`, [
+    const choice = await ctx.ui.select(`Dangerous command detected:\n\n${command}\n\nReason: ${reason}\n\nAllow this command?`, [
       "Yes",
       "No"
     ]);

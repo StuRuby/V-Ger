@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { AuthStorage, createAgentSession, ModelRegistry, SessionManager } from "@mariozechner/pi-coding-agent";
 import { getKimiApiKey, selectKimiModel } from "../src/config.js";
@@ -5,6 +6,8 @@ import {
   BENCHMARK_DEV_TASKS,
   BENCHMARK_HOLDOUT_TASKS,
   BENCHMARK_TOTAL_TASKS,
+  type BenchmarkMetrics,
+  getBenchmarkReportPath,
   loadBenchmarkTasks,
   validateBenchmarkMetrics,
   validateBenchmarkTasks
@@ -178,22 +181,48 @@ async function main() {
   benchmarkSuiteErrors = benchmarkSuite.errors;
   benchmarkSuiteOk = benchmarkSuite.ok;
 
-  const benchmarkMetrics = {
-    toolCallSuccessRate: toolExecutions.length > 0 ? 100 : 0,
-    taskSuccessRate: checks.every((check) => check.passed) && checks.length > 0 ? 100 : 0,
-    safetyViolations: 0,
-    devHoldoutGap: 0
-  };
-  benchmarkMetricErrors = validateBenchmarkMetrics(benchmarkMetrics);
-
   if (!benchmarkSuite.ok) {
     failReason = pickFailReason([failReason, "Benchmark suite scaffold validation failed."]);
   }
-  if (benchmarkMetricErrors.length > 0) {
-    failReason = pickFailReason([failReason, "Benchmark metric threshold gate failed."]);
-  }
   if (benchmarkTasks.length !== BENCHMARK_TOTAL_TASKS) {
     failReason = pickFailReason([failReason, "Benchmark task count is invalid."]);
+  }
+
+  // Run real benchmark executor and read the generated report
+  let benchmarkMetrics: BenchmarkMetrics = {
+    toolCallSuccessRate: 0,
+    taskSuccessRate: 0,
+    safetyViolations: 0,
+    devHoldoutGap: 0
+  };
+
+  if (!failReason) {
+    const benchResult = await runCommand(
+      { name: "benchmark", cmd: "node", args: ["--env-file=.env", "dist/scripts/benchmark-tool-calling.js", "--sample-dev", "5", "--sample-holdout", "2"] },
+      cwd,
+      true
+    );
+    if (benchResult.code !== 0) {
+      failReason = pickFailReason([failReason, "Benchmark execution failed."]);
+    }
+    // Read report regardless of exit code — it may have been partially written
+    try {
+      const reportPath = getBenchmarkReportPath(cwd);
+      const reportRaw = await readFile(reportPath, "utf8");
+      const report = JSON.parse(reportRaw) as { metrics: BenchmarkMetrics; metricErrors: string[]; passed: boolean };
+      benchmarkMetrics = report.metrics;
+      benchmarkMetricErrors = report.metricErrors;
+      if (!report.passed) {
+        failReason = pickFailReason([failReason, "Benchmark metric threshold gate failed."]);
+      }
+    } catch {
+      failReason = pickFailReason([failReason, "Could not read benchmark report."]);
+    }
+  }
+
+  benchmarkMetricErrors = validateBenchmarkMetrics(benchmarkMetrics);
+  if (benchmarkMetricErrors.length > 0) {
+    failReason = pickFailReason([failReason, "Benchmark metric threshold gate failed."]);
   }
 
   const endedAt = new Date();

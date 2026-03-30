@@ -4,8 +4,9 @@ import { getLatestRoundArtifactPath } from "../src/round-artifact.js";
 
 type LoopConfig = {
   objective: string;
-  rounds: number;
+  roundsLimit?: number;
   targetBranch: string;
+  maxDurationMinutes: number;
   maxRoundDurationMinutes: number;
   maxRetriesPerRound: number;
   circuitBreakerFailures: number;
@@ -17,35 +18,73 @@ type CommandRunResult = {
 };
 
 const DEFAULT_OBJECTIVE = "improve tool-calling reliability without regressing existing capabilities";
-const DEFAULT_ROUNDS = 1;
 const DEFAULT_TARGET_BRANCH = "evolve/auto";
+const DEFAULT_MAX_DURATION_MINUTES = 120;
 const DEFAULT_MAX_ROUND_DURATION_MINUTES = 120;
 const DEFAULT_MAX_RETRIES_PER_ROUND = 5;
 const DEFAULT_CIRCUIT_BREAKER_FAILURES = 5;
 
-function parseNumberArg(args: string[], key: string, fallback: number): number {
-  const index = args.indexOf(key);
-  if (index === -1) return fallback;
-  const raw = args[index + 1];
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+function parseNumberArg(args: string[], keys: string[], fallback: number): number {
+  for (const key of keys) {
+    const index = args.indexOf(key);
+    if (index === -1) continue;
+    const raw = args[index + 1];
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return fallback;
 }
 
-function parseStringArg(args: string[], key: string, fallback: string): string {
-  const index = args.indexOf(key);
-  if (index === -1) return fallback;
-  const raw = args[index + 1]?.trim();
-  return raw ? raw : fallback;
+function parseOptionalNumberArg(args: string[], keys: string[]): number | undefined {
+  for (const key of keys) {
+    const index = args.indexOf(key);
+    if (index === -1) continue;
+    const raw = args[index + 1];
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+function parseStringArg(args: string[], keys: string[], fallback: string): string {
+  for (const key of keys) {
+    const index = args.indexOf(key);
+    if (index === -1) continue;
+    const raw = args[index + 1]?.trim();
+    if (raw) return raw;
+  }
+  return fallback;
 }
 
 function buildConfig(args: string[]): LoopConfig {
+  const maxDurationMinutes = parseNumberArg(
+    args,
+    ["--max-duration-minutes", "--max-total-minutes"],
+    DEFAULT_MAX_DURATION_MINUTES
+  );
+  const maxRoundDurationMinutes = parseNumberArg(
+    args,
+    ["--max-round-minutes", "--round-timeout-minutes"],
+    DEFAULT_MAX_ROUND_DURATION_MINUTES
+  );
+  const roundsLimit = parseOptionalNumberArg(args, ["--rounds"]);
+
   return {
-    objective: parseStringArg(args, "--objective", DEFAULT_OBJECTIVE),
-    rounds: parseNumberArg(args, "--rounds", DEFAULT_ROUNDS),
-    targetBranch: parseStringArg(args, "--branch", DEFAULT_TARGET_BRANCH),
-    maxRoundDurationMinutes: parseNumberArg(args, "--max-round-minutes", DEFAULT_MAX_ROUND_DURATION_MINUTES),
-    maxRetriesPerRound: parseNumberArg(args, "--max-retries", DEFAULT_MAX_RETRIES_PER_ROUND),
-    circuitBreakerFailures: parseNumberArg(args, "--circuit-breaker", DEFAULT_CIRCUIT_BREAKER_FAILURES)
+    objective: parseStringArg(args, ["--objective"], DEFAULT_OBJECTIVE),
+    roundsLimit,
+    targetBranch: parseStringArg(args, ["--branch"], DEFAULT_TARGET_BRANCH),
+    maxDurationMinutes,
+    maxRoundDurationMinutes,
+    maxRetriesPerRound: parseNumberArg(args, ["--max-retries"], DEFAULT_MAX_RETRIES_PER_ROUND),
+    circuitBreakerFailures: parseNumberArg(
+      args,
+      ["--circuit-breaker-failures", "--circuit-breaker"],
+      DEFAULT_CIRCUIT_BREAKER_FAILURES
+    )
   };
 }
 
@@ -154,15 +193,30 @@ async function runSingleRoundAttempt(cwd: string, config: LoopConfig): Promise<b
 async function main() {
   const cwd = process.cwd();
   const config = buildConfig(process.argv.slice(2));
+  const startedAt = Date.now();
+  const deadline = startedAt + config.maxDurationMinutes * 60 * 1000;
 
   if (!(await ensureEvolutionBranch(cwd, config.targetBranch))) {
     console.error(`Failed to switch to evolution branch: ${config.targetBranch}`);
     process.exit(1);
   }
 
+  console.error(
+    `Evolution loop config: branch=${config.targetBranch} objective="${config.objective}" maxDuration=${config.maxDurationMinutes}m maxRound=${config.maxRoundDurationMinutes}m maxRetries=${config.maxRetriesPerRound} circuitBreaker=${config.circuitBreakerFailures} roundsLimit=${config.roundsLimit ?? "none"}`
+  );
+
   let consecutiveFailures = 0;
-  for (let roundIndex = 1; roundIndex <= config.rounds; roundIndex += 1) {
-    console.error(`Starting evolution round ${roundIndex}/${config.rounds}`);
+  let roundIndex = 0;
+  while (Date.now() < deadline) {
+    if (config.roundsLimit && roundIndex >= config.roundsLimit) {
+      break;
+    }
+    roundIndex += 1;
+
+    const remainingMinutes = Math.max(0, Math.floor((deadline - Date.now()) / 60000));
+    console.error(
+      `Starting evolution round ${roundIndex}${config.roundsLimit ? `/${config.roundsLimit}` : ""} (remaining ~${remainingMinutes}m)`
+    );
 
     let roundSuccess = false;
     for (let attempt = 1; attempt <= config.maxRetriesPerRound; attempt += 1) {
@@ -188,6 +242,11 @@ async function main() {
       );
       process.exit(1);
     }
+  }
+
+  if (roundIndex === 0) {
+    console.error("No round executed (duration budget too small or rounds limit is zero).");
+    process.exit(1);
   }
 
   console.error("Evolution loop finished.");
