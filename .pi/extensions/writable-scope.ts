@@ -14,6 +14,7 @@ export default function (pi: ExtensionAPI) {
     const repoRoot = normalizeRepoRoot(ctx.cwd);
     const relativePath = toRepoRelativePath(absolutePath, repoRoot);
 
+    // 这里负责“默认拒绝，按目录白名单放行”，把实际可写范围集中到一处维护。
     if (!relativePath || !isWritablePathAllowed(relativePath)) {
       if (ctx.hasUI) {
         ctx.ui.notify(`Blocked write/edit outside writable scope: ${absolutePath}`, "warning");

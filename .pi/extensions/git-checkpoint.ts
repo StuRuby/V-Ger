@@ -14,6 +14,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("turn_start", async () => {
+    // 用 git stash create 生成一次只读快照，不修改工作区，适合在每轮开始时做轻量 checkpoint。
     const { stdout } = await pi.exec("git", ["stash", "create"]);
     const ref = stdout.trim();
     if (ref && currentEntryId) {
@@ -29,6 +30,7 @@ export default function (pi: ExtensionAPI) {
       return;
     }
 
+    // 只有 fork 前才提供恢复入口，避免在正常单线程回合里意外回滚用户已有改动。
     const choice = await ctx.ui.select("Restore code state from checkpoint?", [
       "Yes, restore code to that point",
       "No, keep current code"

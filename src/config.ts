@@ -31,6 +31,7 @@ export function getKimiApiKey(env: NodeJS.ProcessEnv = process.env): string {
  * @returns The first matching Kimi model, or undefined if none found
  */
 export function selectKimiModel<T extends { provider: string }>(models: T[]): T | undefined {
+  // provider 选择策略刻意保持简单，保证所有入口对“只能用 kimi-coding”这条规则一致。
   return models.find((model) => model.provider === KIMI_PROVIDER);
 }
 
@@ -48,6 +49,7 @@ export function buildStartupConfig(args: string[], env: NodeJS.ProcessEnv = proc
     throw new Error('Usage: node dist/src/index.js "your prompt"');
   }
 
+  // 这里显式读取 apiKey，即使当前启动流程未直接传下去，也能在启动时尽早暴露配置错误。
   const apiKey = getKimiApiKey(env);
   return { prompt, apiKey, cwd };
 }

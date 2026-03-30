@@ -32,6 +32,7 @@ describe("benchmark scaffold", () => {
   });
 
   it("selects requested dev and holdout sample sizes", async () => {
+    // 抽样测试固定覆盖 dev/holdout 两侧，确保 CLI 采样参数不会破坏 split 边界。
     const tasks = await loadBenchmarkTasks(process.cwd());
     const selected = selectBenchmarkTasks(tasks, 3, 2);
     expect(selected.filter((task) => task.split === "dev")).toHaveLength(3);

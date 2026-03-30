@@ -24,6 +24,7 @@ function registerSingleToolCallHandler(registerExtension: (pi: any) => void): To
 }
 
 function setupExtension(registerExtension: (pi: any) => void, execImpl?: (cmd: string, args: string[]) => Promise<any>) {
+  // 这里用最小假 pi runtime 驱动 extension，测试重点是钩子行为，不是 Pi 本身。
   const handlers = new Map<string, EventHandler>();
   const execCalls: Array<{ cmd: string; args: string[] }> = [];
 

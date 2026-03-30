@@ -105,6 +105,7 @@ function runCommand(
     const timeout = timeoutMs
       ? setTimeout(() => {
           timedOut = true;
+          // 先发 SIGTERM，给脚本清理机会；如果还挂住，再升级到 SIGKILL。
           child.kill("SIGTERM");
           setTimeout(() => child.kill("SIGKILL"), 2_000);
         }, timeoutMs)
@@ -137,6 +138,7 @@ async function ensureEvolutionBranch(cwd: string, branch: string): Promise<boole
   const current = await runGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
   if (current === branch) return true;
 
+  // 演化循环固定落在目标分支上，避免把自动提交混进用户当前分支。
   const exists = Boolean(await runGit(["show-ref", "--verify", `refs/heads/${branch}`], cwd));
   const checkoutArgs = exists ? ["checkout", branch] : ["checkout", "-b", branch];
   const result = await runCommand("git", checkoutArgs, cwd);
@@ -187,6 +189,7 @@ async function runSingleRoundAttempt(cwd: string, config: LoopConfig): Promise<b
     return false;
   }
 
+  // 只有 cycle 和 gate 都成功后才提交，保证每个 round commit 都对应一个完整通过的演化结果。
   return await commitRound(cwd, config.objective);
 }
 
@@ -237,6 +240,7 @@ async function main() {
     }
 
     if (consecutiveFailures >= config.circuitBreakerFailures) {
+      // 连续失败触发熔断，防止 agent 在错误状态里长时间重复消耗预算。
       console.error(
         `Circuit breaker triggered: ${consecutiveFailures} consecutive failures (threshold=${config.circuitBreakerFailures}).`
       );

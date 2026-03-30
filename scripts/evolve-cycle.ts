@@ -63,6 +63,7 @@ function runCommand(command: CheckCommand, cwd: string, inheritOutput: boolean):
 
 async function runPostChecks(cwd: string): Promise<GateCheckResult[]> {
   const results: GateCheckResult[] = [];
+  // 后置检查按顺序短路执行，目的是尽快暴露第一个失败门，而不是堆叠噪音日志。
   for (const command of POST_CHECKS) {
     const result = await runCommand(command, cwd, true);
     results.push({
@@ -114,6 +115,7 @@ async function main() {
   let benchmarkSuiteOk = false;
   let agentRunOk = false;
 
+  // failReason 是整轮演化的统一失败出口；后面所有 gate 都只负责补充第一个有意义的失败原因。
   try {
     getKimiApiKey(process.env);
   } catch (error) {
@@ -188,7 +190,7 @@ async function main() {
     failReason = pickFailReason([failReason, "Benchmark task count is invalid."]);
   }
 
-  // Run real benchmark executor and read the generated report
+  // 真实 benchmark 单独跑脚本并读回报告，这样脚本本身也能作为独立 gate 复用。
   let benchmarkMetrics: BenchmarkMetrics = {
     toolCallSuccessRate: 0,
     taskSuccessRate: 0,
@@ -205,7 +207,7 @@ async function main() {
     if (benchResult.code !== 0) {
       failReason = pickFailReason([failReason, "Benchmark execution failed."]);
     }
-    // Read report regardless of exit code — it may have been partially written
+    // 即使 benchmark 非 0 退出，也尽量读报告，方便保留失败现场和具体指标。
     try {
       const reportPath = getBenchmarkReportPath(cwd);
       const reportRaw = await readFile(reportPath, "utf8");

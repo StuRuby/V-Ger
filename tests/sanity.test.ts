@@ -23,6 +23,7 @@ describe("config bootstrap", () => {
   });
 
   it("selects kimi-coding model from available models", () => {
+    // 这里直接覆盖 provider 过滤规则，保证入口不会误选到其他供应商模型。
     const model = selectKimiModel([
       { provider: "openai", id: "gpt-4o" },
       { provider: "kimi-coding", id: "kimi-k2" }

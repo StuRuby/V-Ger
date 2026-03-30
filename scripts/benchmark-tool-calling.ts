@@ -78,12 +78,12 @@ async function applyDirtyState(mainCwd: string, worktree: string, dirtyFiles: Ma
     const destPath = join(worktree, filePath);
 
     if (statusCode === "D") {
-      // Deleted in main → remove from worktree too
+      // 主仓库里已删除的文件也要在 worktree 中删除，保证 benchmark 基线和当前工作区一致。
       if (existsSync(destPath)) {
         rmSync(destPath);
       }
     } else {
-      // Modified, added, or untracked → copy to worktree
+      // 已修改 / 新增 / 未跟踪文件都复制进去，让 benchmark 测的是“当前真实候选代码”。
       if (existsSync(srcPath)) {
         copyFile(srcPath, destPath);
       }
@@ -93,6 +93,7 @@ async function applyDirtyState(mainCwd: string, worktree: string, dirtyFiles: Ma
 
 /** Reset worktree writable dirs to HEAD and remove untracked files in those dirs */
 async function resetWorktree(worktree: string): Promise<void> {
+  // 每个 benchmark task 都需要从同一基线起跑，否则前一个任务的副作用会污染后一个任务。
   await runGit(["checkout", "--", "src", "tests", "benchmarks", "docs"], worktree);
   await runGit(["clean", "-fd", "src", "tests", "benchmarks", "docs"], worktree);
 }
@@ -123,7 +124,7 @@ async function main(): Promise<void> {
 
   console.error(`[benchmark] starting: sample-dev=${sampleDev} sample-holdout=${sampleHoldout}`);
 
-  // 1. Load and select tasks
+  // 1. 先加载完整任务，再按 CLI 抽样；采样逻辑集中在 src/benchmark.ts 保持一致。
   const allTasks = await loadBenchmarkTasks(mainCwd);
   const tasks = selectBenchmarkTasks(allTasks, sampleDev, sampleHoldout);
   console.error(`[benchmark] selected ${tasks.length} tasks (${sampleDev} dev + ${sampleHoldout} holdout)`);
@@ -137,7 +138,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // 3. Create git worktree
+  // 3. 在独立 worktree 里跑 benchmark，避免污染主工作区，也便于每轮任务重置。
   const worktreeDir = join(tmpdir(), `v-ger-bench-${Date.now()}`);
   console.error(`[benchmark] creating worktree at ${worktreeDir}`);
 
@@ -166,7 +167,7 @@ async function main(): Promise<void> {
   await applyDirtyState(mainCwd, worktreeDir, dirtyFiles);
   console.error(`[benchmark] applied ${dirtyFiles.size} dirty file(s) to worktree`);
 
-  // 7. Setup auth for agent sessions
+  // 7. 所有任务复用同一个 model registry / auth storage，避免 benchmark 期间重复做 provider 初始化。
   const authStorage = AuthStorage.create();
   const modelRegistry = new ModelRegistry(authStorage);
   const availableModels = await modelRegistry.getAvailable();
@@ -177,7 +178,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // 8. Run each task
+  // 8. 逐任务执行；每个任务都只看本轮工具使用、错误和写入范围，不共享状态。
   const results: BenchmarkTaskResult[] = [];
   const repoRoot = normalizeRepoRoot(worktreeDir);
 
@@ -232,7 +233,7 @@ async function main(): Promise<void> {
       clearTimeout(timeoutHandle);
     }
 
-    // Determine results for this task
+    // 通过前后 git snapshot 估算任务副作用，再用 writable-policy 判断是否越界写入。
     const postSnapshot = await getGitPorcelain(worktreeDir);
     const changedFiles = getTaskChangedFiles(preBenchmarkSnapshot, postSnapshot);
 
@@ -255,7 +256,7 @@ async function main(): Promise<void> {
       safetyViolation
     });
 
-    // Reset worktree for next task
+    // 下一个任务前恢复 worktree，并重新叠加主工作区的脏改动，维持“同一候选代码，多任务复测”。
     if (i < tasks.length - 1) {
       await resetWorktree(worktreeDir);
       await applyDirtyState(mainCwd, worktreeDir, dirtyFiles);

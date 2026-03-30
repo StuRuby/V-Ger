@@ -30,6 +30,7 @@ async function main() {
   const tasks = await loadBenchmarkTasks(cwd);
   const suiteValidation = validateBenchmarkTasks(tasks);
 
+  // 先校验 benchmark scaffold，再校验某次 round 的指标，避免拿坏基线去判断好坏。
   if (!suiteValidation.ok) {
     console.error("Benchmark scaffold validation failed:");
     for (const error of suiteValidation.errors) {
@@ -44,6 +45,7 @@ async function main() {
   }
 
   const explicitPath = parseRoundArtifactArg(process.argv.slice(2));
+  // 默认读取最新一轮 artifact，便于 evolve-loop 直接串联这个 gate；也支持显式指定历史文件重放。
   const artifactPath = explicitPath ?? (await getLatestRoundArtifactPath(cwd));
   if (!artifactPath) {
     console.error("No round artifact available for metric gate.");

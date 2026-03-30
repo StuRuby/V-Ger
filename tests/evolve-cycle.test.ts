@@ -30,6 +30,7 @@ describe("evolve cycle helpers", () => {
     const root = await mkdtemp(join(tmpdir(), "v-ger-evolve-present-"));
     tempDirs.push(root);
 
+    // 用最小占位文件模拟 harness 完整存在，测试只关注路径门禁，不依赖扩展具体实现。
     for (const relPath of REQUIRED_EXTENSIONS) {
       const absPath = join(root, relPath);
       await mkdir(join(absPath, ".."), { recursive: true });

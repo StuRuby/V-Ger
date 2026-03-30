@@ -38,6 +38,7 @@ export function createRoundId(at: Date = new Date()): string {
   const hour = String(at.getHours()).padStart(2, "0");
   const minute = String(at.getMinutes()).padStart(2, "0");
   const second = String(at.getSeconds()).padStart(2, "0");
+  // 这里用纯时间戳格式，目的是让文件名天然按字典序对应创建顺序。
   return `${year}${month}${day}-${hour}${minute}${second}`;
 }
 
@@ -61,6 +62,7 @@ export async function getLatestRoundArtifactPath(rootDir: string = process.cwd()
   } catch {
     return undefined;
   }
+  // 依赖 roundId 的时间排序约定，避免额外读取每个 artifact 再比较时间字段。
   const jsonFiles = entries.filter((name) => name.endsWith(".json")).sort();
   if (jsonFiles.length === 0) return undefined;
   return join(dir, jsonFiles[jsonFiles.length - 1]);

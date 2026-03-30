@@ -2,6 +2,7 @@ import { AuthStorage, createAgentSession, ModelRegistry, SessionManager } from "
 import { buildStartupConfig, selectKimiModel } from "./config.js";
 
 async function main() {
+  // 启动阶段先把 CLI 参数、环境变量和 cwd 固化，避免后面初始化半途失败。
   let config: ReturnType<typeof buildStartupConfig>;
   try {
     config = buildStartupConfig(process.argv.slice(2), process.env, process.cwd());
@@ -20,6 +21,7 @@ async function main() {
     process.exit(1);
   }
 
+  // 主入口只维护一次性的 agent session；更复杂的编排放到 scripts/ 里处理。
   const { session } = await createAgentSession({
     cwd: config.cwd,
     model,
@@ -33,6 +35,7 @@ async function main() {
     if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
       process.stdout.write(event.assistantMessageEvent.delta);
     }
+    // 单独把工具调用打到 stderr，便于区分模型自然语言输出和执行轨迹。
     if (event.type === "tool_execution_start") {
       sawToolExecution = true;
       console.error(`[tool:start] ${event.toolName}`);

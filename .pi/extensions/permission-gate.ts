@@ -17,6 +17,7 @@ function isRecursiveRm(command: string): boolean {
 function isProtectedPathWriteAttempt(command: string): boolean {
   if (!hasCommandReferenceToProtectedPath(command)) return false;
 
+  // 先确认命令触碰了受保护路径，再识别它是否真的带有写入/破坏语义，减少误拦截只读命令。
   const hasRedirection = /(^|[^<])>>?/.test(command);
   const hasExplicitWriteCommand =
     /\b(rm|mv|cp|touch|mkdir|truncate|install|ln)\b/i.test(command) ||
@@ -52,6 +53,7 @@ export default function (pi: ExtensionAPI) {
       return { block: true, reason };
     }
 
+    // 交互模式下把最终决定权交给操作者，避免把所有高风险维护操作都彻底封死。
     const choice = await ctx.ui.select(`Dangerous command detected:\n\n${command}\n\nReason: ${reason}\n\nAllow this command?`, [
       "Yes",
       "No"

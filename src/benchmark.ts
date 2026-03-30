@@ -79,6 +79,7 @@ export function getBenchmarkReportPath(rootDir: string = process.cwd()): string 
 }
 
 function assertBenchmarkSeed(seed: unknown): asserts seed is BenchmarkSeed {
+  // 这里只做结构级兜底校验；更细的配额和分布约束在 validateBenchmarkTasks 里统一检查。
   if (!seed || typeof seed !== "object") {
     throw new Error("Invalid benchmark seed: root must be an object.");
   }
@@ -100,6 +101,7 @@ function renderPrompt(template: string, index: number, category: BenchmarkCatego
 
 export function generateTasksFromSeed(seed: BenchmarkSeed): BenchmarkTask[] {
   const tasks: BenchmarkTask[] = [];
+  // categoryCounters 用来维持稳定的类别内序号，确保生成的 task id 可重复、可比较。
   const categoryCounters: Record<BenchmarkCategory, number> = {
     single_tool: 0,
     multi_tool_chain: 0,
@@ -214,6 +216,7 @@ export function selectBenchmarkTasks(
   sampleDev: number = BENCHMARK_DEV_TASKS,
   sampleHoldout: number = BENCHMARK_HOLDOUT_TASKS
 ): BenchmarkTask[] {
+  // 抽样保留 seed 文件原始顺序，便于复现某个失败任务，而不是在运行期重新随机化。
   const devLimit = Math.max(0, Math.min(BENCHMARK_DEV_TASKS, sampleDev));
   const holdoutLimit = Math.max(0, Math.min(BENCHMARK_HOLDOUT_TASKS, sampleHoldout));
 
@@ -249,6 +252,7 @@ export function calculateBenchmarkMetrics(results: BenchmarkTaskResult[]): Bench
   const devResults = results.filter((result) => result.split === "dev");
   const holdoutResults = results.filter((result) => result.split === "holdout");
 
+  // dev/holdout gap 只比较 task success rate，用来监控是否出现过拟合，而不是工具层面的偶然波动。
   const toolSuccessRate = percentage(
     results.filter((result) => result.toolSuccess).length,
     results.length
