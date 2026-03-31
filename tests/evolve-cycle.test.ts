@@ -1,16 +1,20 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   buildEvolvePrompt,
   createToolCallLogEntry,
+  DEFAULT_EVOLVE_OBJECTIVE,
   findMissingHarnessExtensions,
+  generateObjective,
   parseEvolveObjective,
+  PROGRESSION_ROADMAP,
   REQUIRED_EXTENSIONS,
   summarizeWeakCategories,
   type LastRoundReport
 } from "../src/evolve-cycle.js";
+import type { RoundArtifact } from "../src/round-artifact.js";
 
 const tempDirs: string[] = [];
 
@@ -107,5 +111,137 @@ describe("evolve cycle helpers", () => {
     expect(entry.action).toBe("allowed");
     expect(entry.reason).toBeUndefined();
     expect(entry.input).toBeUndefined();
+  });
+});
+
+// ── generateObjective ────────────────────────────────────────────────────────
+
+function makeReport(overrides: Partial<LastRoundReport["metrics"]> = {}, tasks: LastRoundReport["tasks"] = []): LastRoundReport {
+  return {
+    metrics: {
+      toolCallSuccessRate: 100,
+      taskSuccessRate: 100,
+      safetyViolations: 0,
+      devHoldoutGap: 0,
+      ...overrides
+    },
+    tasks
+  };
+}
+
+function makeArtifact(objective: string, toolCallSuccessRate: number): RoundArtifact {
+  return {
+    roundId: "20260101-000000",
+    objective,
+    branch: "evolve/auto",
+    commitSha: "abc123",
+    startedAt: new Date().toISOString(),
+    endedAt: new Date().toISOString(),
+    durationMs: 1000,
+    changedFiles: [],
+    toolExecutions: [],
+    checks: [],
+    benchmark: {
+      suiteOk: true,
+      suiteErrors: [],
+      metrics: { toolCallSuccessRate, taskSuccessRate: 100, safetyViolations: 0, devHoldoutGap: 0 },
+      metricErrors: [],
+      passed: true
+    },
+    safetyInterceptEvents: [],
+    status: "passed"
+  };
+}
+
+describe("generateObjective", () => {
+  let tempRoot: string;
+
+  afterEach(async () => {
+    // temp dirs are OS-managed
+  });
+
+  async function makeRoot(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "v-ger-obj-"));
+    await mkdir(join(dir, "artifacts", "evolution"), { recursive: true });
+    return dir;
+  }
+
+  it("cold start — no artifacts, no report → DEFAULT_EVOLVE_OBJECTIVE", async () => {
+    tempRoot = await makeRoot();
+    const result = await generateObjective(tempRoot, [], undefined);
+    expect(result).toBe(DEFAULT_EVOLVE_OBJECTIVE);
+  });
+
+  it("safety violation → eliminate safety violations objective", async () => {
+    tempRoot = await makeRoot();
+    const report = makeReport({ safetyViolations: 2 });
+    const result = await generateObjective(tempRoot, [], report);
+    expect(result).toBe("eliminate safety violations in tool usage");
+  });
+
+  it("toolCallSuccessRate < 99% → weakest category in objective", async () => {
+    tempRoot = await makeRoot();
+    const report = makeReport(
+      { toolCallSuccessRate: 87 },
+      [
+        { category: "multi_tool_chain", taskSuccess: false },
+        { category: "multi_tool_chain", taskSuccess: false },
+        { category: "single_tool", taskSuccess: true }
+      ]
+    );
+    const result = await generateObjective(tempRoot, [], report);
+    expect(result).toContain("multi_tool_chain");
+    expect(result).toContain("87%");
+    expect(result).toContain("≥99%");
+  });
+
+  it("3-round stagnation → stage advances", async () => {
+    tempRoot = await makeRoot();
+    const sameObjective = PROGRESSION_ROADMAP[0].objective;
+    const artifacts = [
+      makeArtifact(sameObjective, 99.5),
+      makeArtifact(sameObjective, 99.5),
+      makeArtifact(sameObjective, 99.6)  // delta = 0.1 < 1%
+    ];
+    // All metrics pass so only stagnation rule applies
+    const report = makeReport();
+    const result = await generateObjective(tempRoot, artifacts, report);
+    expect(result).toBe(PROGRESSION_ROADMAP[1].objective);
+    // stage.json should now be 2
+    const stageRaw = await readFile(join(tempRoot, "artifacts", "stage.json"), "utf8");
+    expect(JSON.parse(stageRaw).stage).toBe(2);
+  });
+
+  it("stage.json corruption → resets to stage=1, returns stage-1 objective", async () => {
+    tempRoot = await makeRoot();
+    await writeFile(join(tempRoot, "artifacts", "stage.json"), "not valid json", "utf8");
+    // All metrics pass
+    const report = makeReport();
+    const result = await generateObjective(tempRoot, [], report);
+    expect(result).toBe(PROGRESSION_ROADMAP[0].objective);
+    // stage.json should be reset
+    const stageRaw = await readFile(join(tempRoot, "artifacts", "stage.json"), "utf8");
+    expect(JSON.parse(stageRaw).stage).toBe(1);
+  });
+
+  it("all metrics pass, no stagnation → current stage objective", async () => {
+    tempRoot = await makeRoot();
+    await writeFile(
+      join(tempRoot, "artifacts", "stage.json"),
+      JSON.stringify({ stage: 2, updatedAt: new Date().toISOString() }),
+      "utf8"
+    );
+    const report = makeReport();
+    const result = await generateObjective(tempRoot, [], report);
+    expect(result).toBe(PROGRESSION_ROADMAP[1].objective);
+  });
+
+  it("devHoldoutGap > 2% → overfitting objective", async () => {
+    tempRoot = await makeRoot();
+    const report = makeReport({ devHoldoutGap: 3.5 });
+    const result = await generateObjective(tempRoot, [], report);
+    expect(result).toContain("overfitting gap");
+    expect(result).toContain("3.5%");
+    expect(result).toContain("≤2%");
   });
 });

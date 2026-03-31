@@ -1,6 +1,10 @@
+import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { basename } from "node:path";
-import { getLatestRoundArtifactPath } from "../src/round-artifact.js";
+import { getBenchmarkReportPath } from "../src/benchmark.js";
+import { generateObjective } from "../src/evolve-cycle.js";
+import { getLatestRoundArtifactPath, loadRecentArtifacts } from "../src/round-artifact.js";
+import type { LastRoundReport } from "../src/evolve-cycle.js";
 
 type LoopConfig = {
   objective: string;
@@ -17,7 +21,6 @@ type CommandRunResult = {
   timedOut: boolean;
 };
 
-const DEFAULT_OBJECTIVE = "improve tool-calling reliability without regressing existing capabilities";
 const DEFAULT_TARGET_BRANCH = "evolve/auto";
 const DEFAULT_MAX_DURATION_MINUTES = 120;
 const DEFAULT_MAX_ROUND_DURATION_MINUTES = 120;
@@ -60,7 +63,7 @@ function parseStringArg(args: string[], keys: string[], fallback: string): strin
   return fallback;
 }
 
-function buildConfig(args: string[]): LoopConfig {
+function buildConfig(args: string[], objective: string): LoopConfig {
   const maxDurationMinutes = parseNumberArg(
     args,
     ["--max-duration-minutes", "--max-total-minutes"],
@@ -74,7 +77,7 @@ function buildConfig(args: string[]): LoopConfig {
   const roundsLimit = parseOptionalNumberArg(args, ["--rounds"]);
 
   return {
-    objective: parseStringArg(args, ["--objective"], DEFAULT_OBJECTIVE),
+    objective,
     roundsLimit,
     targetBranch: parseStringArg(args, ["--branch"], DEFAULT_TARGET_BRANCH),
     maxDurationMinutes,
@@ -193,9 +196,32 @@ async function runSingleRoundAttempt(cwd: string, config: LoopConfig): Promise<b
   return await commitRound(cwd, config.objective);
 }
 
+async function resolveObjective(cwd: string, args: string[]): Promise<string> {
+  const manual = parseStringArg(args, ["--objective"], "");
+  if (manual) return manual;
+
+  const [recentArtifacts, benchmarkReport] = await Promise.all([
+    loadRecentArtifacts(cwd),
+    (async (): Promise<LastRoundReport | undefined> => {
+      try {
+        const raw = await readFile(getBenchmarkReportPath(cwd), "utf8");
+        return JSON.parse(raw) as LastRoundReport;
+      } catch {
+        return undefined;
+      }
+    })()
+  ]);
+
+  const objective = await generateObjective(cwd, recentArtifacts, benchmarkReport);
+  console.error(`[objective] generated: ${objective}`);
+  return objective;
+}
+
 async function main() {
   const cwd = process.cwd();
-  const config = buildConfig(process.argv.slice(2));
+  const args = process.argv.slice(2);
+  const objective = await resolveObjective(cwd, args);
+  const config = buildConfig(args, objective);
   const startedAt = Date.now();
   const deadline = startedAt + config.maxDurationMinutes * 60 * 1000;
 

@@ -4,9 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       objective:
-        description: "Evolution objective for this run"
+        description: "Evolution objective for this run (leave empty to auto-generate from benchmark history)"
         required: false
-        default: "improve tool-calling reliability without regressing existing capabilities"
   schedule:
     - cron: "0 */3 * * *"
 
@@ -49,10 +48,10 @@ jobs:
         env:
           KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
         run: |
-          OBJECTIVE="${{ github.event.inputs.objective || 'improve tool-calling reliability without regressing existing capabilities' }}"
+          OBJECTIVE="${{ github.event.inputs.objective }}"
           node dist/scripts/evolve-loop.js \
             --rounds 1 \
-            --objective "$OBJECTIVE" \
+            ${OBJECTIVE:+--objective "$OBJECTIVE"} \
             --branch "evolve/auto" \
             --max-round-minutes 120 \
             --max-retries 5 \

@@ -1,4 +1,4 @@
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BenchmarkMetrics } from "./benchmark.js";
 
@@ -29,6 +29,7 @@ export type RoundArtifact = {
   safetyInterceptEvents: string[];
   status: "passed" | "failed";
   failReason?: string;
+  objectiveSource?: "manual" | "generated";
 };
 
 export function createRoundId(at: Date = new Date()): string {
@@ -52,6 +53,27 @@ export async function writeRoundArtifact(artifact: RoundArtifact, rootDir: strin
   const filePath = join(dir, `${artifact.roundId}.json`);
   await writeFile(filePath, JSON.stringify(artifact, null, 2), "utf8");
   return filePath;
+}
+
+export async function loadRecentArtifacts(rootDir: string = process.cwd(), n: number = 5): Promise<RoundArtifact[]> {
+  const dir = getRoundArtifactsDir(rootDir);
+  try {
+    const entries = await readdir(dir);
+    const jsonFiles = entries.filter((name) => name.endsWith(".json")).sort();
+    const selected = jsonFiles.slice(-n);
+    const results: RoundArtifact[] = [];
+    for (const name of selected) {
+      try {
+        const raw = await readFile(join(dir, name), "utf8");
+        results.push(JSON.parse(raw) as RoundArtifact);
+      } catch {
+        // 单个 artifact 损坏时跳过，不中止整体加载
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
 }
 
 export async function getLatestRoundArtifactPath(rootDir: string = process.cwd()): Promise<string | undefined> {
