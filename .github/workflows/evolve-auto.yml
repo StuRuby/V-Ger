@@ -60,7 +60,7 @@ jobs:
             --circuit-breaker 5
 
       - name: Push Evolution Branch
-        run: git push origin evolve/auto
+        run: git push --force-with-lease origin evolve/auto
 
       - name: Open Pull Request
         env:
