@@ -211,7 +211,7 @@ async function main() {
 
   if (!failReason) {
     const benchResult = await runCommand(
-      { name: "benchmark", cmd: "node", args: ["--env-file=.env", "dist/scripts/benchmark-tool-calling.js", "--sample-dev", "5", "--sample-holdout", "2"] },
+      { name: "benchmark", cmd: "node", args: ["--env-file-if-exists=.env", "dist/scripts/benchmark-tool-calling.js", "--sample-dev", "5", "--sample-holdout", "2"] },
       cwd,
       true
     );
