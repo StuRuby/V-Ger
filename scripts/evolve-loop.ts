@@ -268,6 +268,7 @@ async function main() {
 
   let consecutiveFailures = 0;
   let roundIndex = 0;
+  let successCount = 0;
   while (Date.now() < deadline) {
     if (config.roundsLimit && roundIndex >= config.roundsLimit) {
       break;
@@ -294,11 +295,11 @@ async function main() {
       console.error(`Round ${roundIndex} failed. Consecutive failures: ${consecutiveFailures}`);
     } else {
       consecutiveFailures = 0;
+      successCount += 1;
       console.error(`Round ${roundIndex} succeeded.`);
     }
 
     if (consecutiveFailures >= config.circuitBreakerFailures) {
-      // 连续失败触发熔断，防止 agent 在错误状态里长时间重复消耗预算。
       console.error(
         `Circuit breaker triggered: ${consecutiveFailures} consecutive failures (threshold=${config.circuitBreakerFailures}).`
       );
@@ -311,7 +312,12 @@ async function main() {
     process.exit(1);
   }
 
-  console.error("Evolution loop finished.");
+  if (successCount === 0) {
+    console.error(`All ${roundIndex} round(s) failed. No changes to push.`);
+    process.exit(1);
+  }
+
+  console.error(`Evolution loop finished. ${successCount}/${roundIndex} round(s) succeeded.`);
 }
 
 void main();
