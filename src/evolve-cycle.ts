@@ -150,11 +150,25 @@ function getWeakestCategory(report: LastRoundReport): string | undefined {
   return weakest;
 }
 
+export type OpenTaskIssue = {
+  number: number;
+  title: string;
+};
+
 export async function generateObjective(
   rootDir: string,
   recentArtifacts: RoundArtifact[],
-  benchmarkReport?: LastRoundReport
+  benchmarkReport?: LastRoundReport,
+  openIssues?: OpenTaskIssue[]
 ): Promise<string> {
+  // 优先级 0: 有人类（或上一轮自动）挂在 Issues 上的任务 → 直接使用
+  if (openIssues && openIssues.length > 0) {
+    const issue = openIssues[0];
+    const title = issue.title.replace(/^\[cap-gap\]\s*/i, "").trim();
+    console.error(`[generateObjective] issue-driven objective from #${issue.number}: ${title}`);
+    return `fix capability gap (issue #${issue.number}): ${title}`;
+  }
+
   // cold start: 无任何历史数据时直接返回默认目标
   if (recentArtifacts.length === 0 && !benchmarkReport) {
     return DEFAULT_EVOLVE_OBJECTIVE;

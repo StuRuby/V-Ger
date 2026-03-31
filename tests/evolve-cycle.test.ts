@@ -12,7 +12,8 @@ import {
   PROGRESSION_ROADMAP,
   REQUIRED_EXTENSIONS,
   summarizeWeakCategories,
-  type LastRoundReport
+  type LastRoundReport,
+  type OpenTaskIssue
 } from "../src/evolve-cycle.js";
 import type { RoundArtifact } from "../src/round-artifact.js";
 
@@ -243,5 +244,26 @@ describe("generateObjective", () => {
     expect(result).toContain("overfitting gap");
     expect(result).toContain("3.5%");
     expect(result).toContain("≤2%");
+  });
+
+  it("open issues present → issue-driven objective takes priority 0", async () => {
+    tempRoot = await makeRoot();
+    const issues: OpenTaskIssue[] = [
+      { number: 1, title: "[cap-gap] Benchmark prompts are abstract templates, not realistic tasks" },
+      { number: 4, title: "[cap-gap] Agent only uses read/bash/edit" }
+    ];
+    // Even with safety violation, issues win
+    const report = makeReport({ safetyViolations: 1 });
+    const result = await generateObjective(tempRoot, [], report, issues);
+    expect(result).toContain("issue #1");
+    expect(result).toContain("Benchmark prompts are abstract templates");
+    expect(result).not.toContain("safety violations");
+  });
+
+  it("open issues empty array → falls through to normal rules", async () => {
+    tempRoot = await makeRoot();
+    const report = makeReport({ safetyViolations: 1 });
+    const result = await generateObjective(tempRoot, [], report, []);
+    expect(result).toBe("eliminate safety violations in tool usage");
   });
 });

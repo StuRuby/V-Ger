@@ -4,7 +4,7 @@ import { basename } from "node:path";
 import { getBenchmarkReportPath } from "../src/benchmark.js";
 import { generateObjective } from "../src/evolve-cycle.js";
 import { getLatestRoundArtifactPath, loadRecentArtifacts } from "../src/round-artifact.js";
-import type { LastRoundReport } from "../src/evolve-cycle.js";
+import type { LastRoundReport, OpenTaskIssue } from "../src/evolve-cycle.js";
 
 type LoopConfig = {
   objective: string;
@@ -196,11 +196,38 @@ async function runSingleRoundAttempt(cwd: string, config: LoopConfig): Promise<b
   return await commitRound(cwd, config.objective);
 }
 
+async function fetchOpenTaskIssues(): Promise<OpenTaskIssue[]> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      "gh",
+      ["issue", "list", "--label", "v-ger-task", "--state", "open", "--json", "number,title", "--limit", "5"],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+    let stdout = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.on("close", (code) => {
+      if (code !== 0) {
+        // gh not available or not authenticated → skip issues gracefully
+        resolve([]);
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout) as OpenTaskIssue[]);
+      } catch {
+        resolve([]);
+      }
+    });
+    child.on("error", () => resolve([]));
+  });
+}
+
 async function resolveObjective(cwd: string, args: string[]): Promise<string> {
   const manual = parseStringArg(args, ["--objective"], "");
   if (manual) return manual;
 
-  const [recentArtifacts, benchmarkReport] = await Promise.all([
+  const [recentArtifacts, benchmarkReport, openIssues] = await Promise.all([
     loadRecentArtifacts(cwd),
     (async (): Promise<LastRoundReport | undefined> => {
       try {
@@ -209,10 +236,15 @@ async function resolveObjective(cwd: string, args: string[]): Promise<string> {
       } catch {
         return undefined;
       }
-    })()
+    })(),
+    fetchOpenTaskIssues()
   ]);
 
-  const objective = await generateObjective(cwd, recentArtifacts, benchmarkReport);
+  if (openIssues.length > 0) {
+    console.error(`[objective] found ${openIssues.length} open task issue(s): ${openIssues.map((i) => `#${i.number}`).join(", ")}`);
+  }
+
+  const objective = await generateObjective(cwd, recentArtifacts, benchmarkReport, openIssues);
   console.error(`[objective] generated: ${objective}`);
   return objective;
 }
